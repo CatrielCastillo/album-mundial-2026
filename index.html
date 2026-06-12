@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><link rel="icon" href="data:,">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Álbum Mundial 2026</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#f4f4f4;
+    padding:20px;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+}
+
+h1{
+    margin-bottom:20px;
+}
+
+.card{
+    background:white;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
+    box-shadow:0 2px 5px rgba(0,0,0,.1);
+}
+
+.controls{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:10px;
+}
+
+input,select,button{
+    padding:10px;
+    border:1px solid #ccc;
+    border-radius:6px;
+}
+
+button{
+    cursor:pointer;
+}
+
+.stats{
+    display:flex;
+    gap:15px;
+    flex-wrap:wrap;
+    font-weight:bold;
+}
+
+.team{
+    margin-bottom:20px;
+}
+
+.team h3{
+    margin-bottom:8px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(45px,1fr));
+    gap:4px;
+}
+
+.sticker{
+    text-align:center;
+    padding:6px;
+    border-radius:5px;
+    font-size:12px;
+    font-weight:bold;
+}
+
+.missing{
+    background:#ffb3b3;
+}
+
+.have{
+    background:#b9f6ca;
+}
+
+.duplicate{
+    background:#fff59d;
+}
+
+#duplicatesList{
+    line-height:1.8;
+}
+
+textarea{
+    width:100%;
+    min-height:80px;
+    padding:10px;
+    margin-top:10px;
+}
+#teamsGrid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:10px;
+    margin-bottom:20px;
+}
+
+.team-card{
+    padding:12px;
+    border-radius:8px;
+    text-align:center;
+    cursor:pointer;
+    font-weight:bold;
+    border:2px solid #ddd;
+}
+
+.team-empty{
+    background:#ffcdd2;
+}
+
+.team-progress{
+    background:#fff9c4;
+}
+
+.team-complete{
+    background:#c8e6c9;
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="container">
+
+<h1>🏆 Álbum Mundial 2026 de Catriel.</h1>
+
+<div class="card">
+
+    <h2>
+        Carga individual
+    </h2>
+
+    <div class="controls">
+        <select id="teamSelect"></select>
+        <input type="text" id="numberInput" placeholder="Número">
+        <button onclick="addSingle()">Agregar</button>
+    </div>
+
+
+        <h3>Carga rapida.</h3>
+
+    <textarea id="groupInput"
+    placeholder="Ejemplo:
+    ARG: 1,5,6,7
+    BRA: 2,4,8
+    FWC: 00,03,15"></textarea>
+
+    <div style="margin-top:10px">
+    <button onclick="addByGroup()">
+        Agregar
+    </button>
+</div>
+</div>
+
+<button onclick="generateExchangeList()">
+    🤝 Modo intercambio
+</button>
+<button onclick="exportData()">
+    📤 Exportar respaldo
+</button>
+
+<button onclick="document.getElementById('importFile').click()">
+    📥 Importar respaldo
+</button>
+
+<input
+    type="file"
+    id="importFile"
+    accept=".json"
+    onchange="importData(event)"
+    style="display:none">
+</div>
+
+<div class="card">
+    <div class="stats">
+        <div>Distintas: <span id="ownedCount">0</span></div>
+        <div>Faltan: <span id="missingCount">0</span></div>
+        <div>Repetidas: <span id="duplicateCount">0</span></div>
+        <div>Total álbum: <span id="totalAlbum"></span></div>
+    </div>
+</div>
+<div class="card">
+    <h3>Progreso del álbum</h3>
+
+    <canvas id="albumChart"
+            width="250"
+            height="250">
+    </canvas>
+
+    <div id="progressText"></div>
+</div>
+
+<div id="teamsGrid"></div>
+
+<div id="album"></div>
+
+
+<script>
+
+const teams = [
+"MEX","RSA","KOR","CZE","CAN","BIH","QAT","SUI","BRA","MAR",
+"HAI","SCO","USA","PAR","AUS","TUR","GER","CUW","CIV","ECU",
+"NED","JPN","SWE","TUN","BEL","EGY","IRN","NZL","ESP","CPV",
+"KSA","URU","FRA","SEN","IRQ","NOR","ARG","ALG","AUT","JOR",
+"POR","COD","UZB","COL","ENG","CRO","GHA","PAN"
+];
+
+const specialTeams = ["FWC","CC"];
+
+const stickers = {};
+
+let selectedTeam = "ARG";
+
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "album-mundial-caty.firebaseapp.com",
+  projectId: "album-mundial-caty",
+  storageBucket: "album-mundial-caty.firebasestorage.app",
+  messagingSenderId: "445987428714",
+  appId: "1:445987428714:web:6cbe4a8fdc66d0ccb62d13"
+};
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+db.ref("album/collection").on("value", (snapshot) => {
+
+    const data = snapshot.val();
+
+    if(data){
+        collection = data;
+        render();
+    }
+});
+
+function generateAlbum(){
+
+    teams.forEach(team=>{
+        stickers[team]=[];
+
+        for(let i=1;i<=20;i++){
+            stickers[team].push(i.toString());
+        }
+    });
+
+    stickers["FWC"]=[];
+    for(let i=0;i<=19;i++){
+        stickers["FWC"].push(i.toString().padStart(2,"0"));
+    }
+
+    stickers["CC"]=[];
+    for(let i=1;i<=14;i++){
+        stickers["CC"].push(i.toString());
+    }
+}
+
+generateAlbum();
+
+const totalAlbum =
+Object.values(stickers)
+.flat()
+.length;
+
+document.getElementById("totalAlbum").textContent =
+totalAlbum;
+
+let collection = {};
+
+function save(){
+
+    db.ref("album/collection").set(collection);
+}
+
+
+function populateSelect(){
+
+    const select =
+    document.getElementById("teamSelect");
+
+    [...teams,...specialTeams].forEach(team=>{
+        const option =
+        document.createElement("option");
+
+        option.value=team;
+        option.textContent=team;
+
+        select.appendChild(option);
+    });
+}
+
+populateSelect();
+
+function addSticker(code){
+
+    code = code.trim().toUpperCase();
+
+    if(!code.includes("-")) return;
+
+    if(!collection[code]){
+        collection[code]=0;
+    }
+
+    collection[code]++;
+}
+
+function addSingle(){
+
+    const team =
+    document.getElementById("teamSelect").value;
+
+    let num =
+    document.getElementById("numberInput")
+    .value.trim();
+
+    if(!num){
+        alert("Ingresá un número.");
+        return;
+    }
+
+    const numero = parseInt(num,10);
+
+    if(isNaN(numero)){
+        alert("El número no es válido.");
+        return;
+    }
+
+    if(team === "FWC"){
+
+        if(numero < 0 || numero > 19){
+            alert("FWC permite solamente números del 00 al 19.");
+            return;
+        }
+
+        num = numero.toString().padStart(2,"0");
+
+    }else if(team === "CC"){
+
+        if(numero < 1 || numero > 14){
+            alert("CC permite solamente números del 1 al 14.");
+            return;
+        }
+
+        num = numero.toString();
+
+    }else{
+
+        if(numero < 1 || numero > 20){
+            alert(`${team} permite solamente números del 1 al 20.`);
+            return;
+        }
+
+        num = numero.toString();
+    }
+
+    addSticker(`${team}-${num}`);
+
+    document.getElementById("numberInput").value = "";
+
+    save();
+    render();
+}
+
+
+function renderStats(){
+
+    let owned=0;
+    let duplicates=0;
+
+    Object.values(collection)
+    .forEach(qty=>{
+
+        owned++;
+
+        if(qty>1){
+            duplicates += qty-1;
+        }
+    });
+
+    document.getElementById("ownedCount")
+    .textContent = owned;
+
+    document.getElementById("missingCount")
+    .textContent = totalAlbum-owned;
+
+    document.getElementById("duplicateCount")
+    .textContent = duplicates;
+
+    document.getElementById("totalAlbum")
+    .textContent = totalAlbum;
+
+    drawAlbumChart(
+        owned,
+        totalAlbum
+    );
+}
+
+
+function renderAlbum(){
+
+    const album =
+    document.getElementById("album");
+
+    album.innerHTML = "";
+
+    const team = selectedTeam;
+
+    const section =
+    document.createElement("div");
+
+    section.className =
+    "card team";
+
+    let completas = 0;
+
+    stickers[team].forEach(num => {
+
+        const code =
+        `${team}-${num}`;
+
+        if(collection[code]){
+            completas++;
+        }
+    });
+
+    let html =
+    `
+    <h2>
+        ${team}
+        (${completas}/${stickers[team].length})
+    </h2>
+
+    <div class="grid">
+    `;
+
+    stickers[team].forEach(num => {
+
+        const code =
+        `${team}-${num}`;
+
+        let cls = "missing";
+        let texto = num;
+
+        if(collection[code] === 1){
+            cls = "have";
+        }
+
+        if(collection[code] > 1){
+            cls = "duplicate";
+            texto =
+            `${num} (${collection[code]})`;
+        }
+
+        html += `
+        <div
+            class="sticker ${cls}"
+            onclick="removeSticker('${code}')"
+            title="Clic para quitar una unidad"
+        >
+            ${texto}
+        </div>`;
+    });
+
+    html += "</div>";
+
+    section.innerHTML = html;
+
+    album.appendChild(section);
+}
+function removeSticker(code){
+
+    if(!collection[code]) return;
+
+    collection[code]--;
+
+    if(collection[code] <= 0){
+        delete collection[code];
+    }
+
+    save();
+    render();
+}
+function drawAlbumChart(owned, totalAlbum){
+
+    const canvas =
+    document.getElementById("albumChart");
+
+    const ctx =
+    canvas.getContext("2d");
+
+    const faltan =
+    totalAlbum - owned;
+
+    const porcentaje =
+    ((owned / totalAlbum) * 100)
+    .toFixed(1);
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    const cx = 125;
+    const cy = 125;
+    const r = 100;
+
+    const angulo =
+    (owned / totalAlbum)
+    * Math.PI * 2;
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(
+        cx,
+        cy,
+        r,
+        0,
+        angulo
+    );
+    ctx.closePath();
+    ctx.fillStyle = "#4caf50";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(
+        cx,
+        cy,
+        r,
+        angulo,
+        Math.PI * 2
+    );
+    ctx.closePath();
+    ctx.fillStyle = "#f44336";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(
+        cx,
+        cy,
+        55,
+        0,
+        Math.PI * 2
+    );
+    ctx.fillStyle = "white";
+    ctx.fill();
+
+    ctx.fillStyle = "black";
+    ctx.font = "bold 20px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        porcentaje + "%",
+        cx,
+        cy + 7
+    );
+
+    document
+    .getElementById("progressText")
+    .innerHTML =
+    `
+    <strong>
+        ${owned} / ${totalAlbum}
+    </strong>
+    `;
+}
+function generateExchangeList(){
+
+    let repetidasText = "";
+    let faltantesText = "";
+
+    Object.keys(stickers).forEach(team => {
+
+        const repetidas = [];
+        const faltantes = [];
+
+        stickers[team].forEach(num => {
+
+            const code = `${team}-${num}`;
+            const qty = collection[code] || 0;
+
+            // FALTANTES
+            if(qty === 0){
+                faltantes.push(num);
+            }
+
+            // REPETIDAS (solo excedentes)
+            if(qty > 1){
+                repetidas.push(
+                    `${num}(x${qty - 1})`
+                );
+            }
+        });
+
+        if(repetidas.length > 0){
+            repetidasText +=
+            `${team}: ${repetidas.join(",")}\n`;
+        }
+
+        if(faltantes.length > 0){
+            faltantesText +=
+            `${team}: ${faltantes.join(",")}\n`;
+        }
+    });
+
+    if(!repetidasText && !faltantesText){
+        alert("¡Álbum completo!");
+        return;
+    }
+
+    const owned =
+    Object.values(collection)
+    .filter(v => v > 0).length;
+
+    const totalAlbum =
+    Object.values(stickers)
+    .reduce((a,b)=>a+b.length,0);
+
+    const percent =
+    ((owned / totalAlbum) * 100).toFixed(1);
+
+    const finalText =
+`🏆 ÁLBUM MUNDIAL 2026
+
+📦 REPETIDAS
+
+${repetidasText || "Ninguna"}
+
+🔍 FALTANTES
+
+${faltantesText || "Ninguna"}
+
+📊 Progreso: ${percent}%`;
+
+    navigator.clipboard.writeText(finalText)
+    .then(() => {
+        alert("📋 Lista de intercambio copiada");
+    })
+    .catch(() => {
+        alert("Error al copiar");
+    });
+}
+function exportData(){
+
+    const data = {
+
+        collection: collection,
+        exportDate:
+        new Date().toISOString()
+
+    };
+
+    const blob =
+    new Blob(
+        [JSON.stringify(data,null,2)],
+        {type:"application/json"}
+    );
+
+    const url =
+    URL.createObjectURL(blob);
+
+    const a =
+    document.createElement("a");
+
+    a.href = url;
+
+    a.download =
+    "album-mundial-2026.json";
+
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+function importData(event){
+
+    const file =
+    event.target.files[0];
+
+    if(!file) return;
+
+    const reader =
+    new FileReader();
+
+    reader.onload = e => {
+
+        try{
+
+            const data =
+            JSON.parse(e.target.result);
+
+            if(!data.collection){
+
+                alert(
+                    "Archivo inválido."
+                );
+
+                return;
+            }
+
+            Object.keys(collection)
+            .forEach(key =>
+                delete collection[key]
+            );
+
+            Object.assign(
+                collection,
+                data.collection
+            );
+
+            save();
+            render();
+
+            alert(
+                "Respaldo restaurado."
+            );
+
+        }catch{
+
+            alert(
+                "Error al importar."
+            );
+        }
+    };
+
+    reader.readAsText(file);
+}
+function render(){
+
+    renderStats();
+    renderTeamsGrid();
+    renderAlbum();
+}
+function renderTeamsGrid(){
+
+    const container =
+    document.getElementById("teamsGrid");
+
+    container.innerHTML = "";
+
+    Object.keys(stickers).forEach(team => {
+
+        const total =
+        stickers[team].length;
+
+        let completas = 0;
+let repetidas = 0;
+
+stickers[team].forEach(num => {
+
+    const code = `${team}-${num}`;
+
+    if(collection[code]){
+        completas++;
+    }
+
+    if(collection[code] > 1){
+        repetidas += collection[code] - 1;
+    }
+});
+
+let clase = "team-empty";
+
+if(completas > 0){
+    clase = "team-progress";
+}
+
+if(completas === total){
+    clase = "team-complete";
+}
+        const card =
+        document.createElement("div");
+
+        card.className =
+        `team-card ${clase}`;
+
+        card.innerHTML =
+        `
+        ${team}<br>
+         ${completas}/${total}<br>
+        R: ${repetidas}
+        `;
+        card.onclick = () => {
+
+        selectedTeam = team;
+
+        renderAlbum();
+
+         document
+        .getElementById("album")
+        .scrollIntoView({
+            behavior: "smooth"
+        });
+};
+
+        container.appendChild(card);
+    });
+}
+render();
+function addByGroup(){
+
+    const texto =
+    document.getElementById("groupInput")
+    .value.trim();
+
+    if(!texto){
+        alert("Ingresá al menos una línea.");
+        return;
+    }
+
+    const lineas = texto.split("\n");
+
+    let agregadas = 0;
+
+    lineas.forEach(linea => {
+
+        if(!linea.includes(":")) return;
+
+        const partes = linea.split(":");
+
+        const team =
+        partes[0].trim().toUpperCase();
+
+        if(!stickers[team]) return;
+
+        const numeros =
+        partes[1].split(",");
+
+        numeros.forEach(n => {
+
+            const numero =
+            parseInt(n.trim(),10);
+
+            if(isNaN(numero)) return;
+
+            let valor;
+
+            if(team === "FWC"){
+
+                if(numero < 0 || numero > 19)
+                    return;
+
+                valor =
+                numero.toString()
+                .padStart(2,"0");
+
+            }else if(team === "CC"){
+
+                if(numero < 1 || numero > 14)
+                    return;
+
+                valor =
+                numero.toString();
+
+            }else{
+
+                if(numero < 1 || numero > 20)
+                    return;
+
+                valor =
+                numero.toString();
+            }
+
+            addSticker(
+                `${team}-${valor}`
+            );
+
+            agregadas++;
+        });
+    });
+
+    save();
+    render();
+
+    document.getElementById("groupInput").value="";
+
+    alert(
+        `${agregadas} figuritas agregadas.`
+    );
+}
+
+</script>
+
+</body>
+</html>
