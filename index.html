@@ -348,6 +348,14 @@ function addSticker(code){
 }
 
 function addSingle(){
+    if(!editMode){
+
+    alert(
+        "🔒 Debes iniciar edición primero."
+    );
+
+    return;
+}
 
     const team =
     document.getElementById("teamSelect").value;
@@ -511,6 +519,14 @@ function renderAlbum(){
     album.appendChild(section);
 }
 function removeSticker(code){
+    if(!editMode){
+
+    alert(
+        "🔒 Debes iniciar edición primero."
+    );
+
+    return;
+}
 
     if(!collection[code]) return;
 
@@ -868,6 +884,14 @@ if(completas === total){
 }
 render();
 function addByGroup(){
+    if(!editMode){
+
+    alert(
+        "🔒 Debes iniciar edición primero."
+    );
+
+    return;
+}
 
     const texto =
     document.getElementById("groupInput")
