@@ -140,6 +140,14 @@ textarea{
 
 <h1>🏆 Álbum Mundial 2026 de Catriel.</h1>
 
+<button onclick="loginEditMode()">
+🔒 Iniciar edición
+</button>
+
+<span id="editStatus">
+🔒 Modo lectura
+</span>
+
 <div class="card">
 
     <h2>
@@ -226,6 +234,10 @@ const specialTeams = ["FWC","CC"];
 const stickers = {};
 
 let selectedTeam = "ARG";
+
+const EDIT_PASSWORD = "catriyjaz";
+
+let editMode = false;
 
 const firebaseConfig = {
   apiKey: "AIzaSyAnch7b_DiQIPteynxOHBM1UZ6yAJ18lZQ",
@@ -756,6 +768,32 @@ function importData(event){
     };
 
     reader.readAsText(file);
+}
+    function loginEditMode(){
+
+    const pass = prompt(
+        "Ingresá la contraseña"
+    );
+
+    if(pass === EDIT_PASSWORD){
+
+        editMode = true;
+
+        document
+        .getElementById("editStatus")
+        .textContent =
+        "✅ Modo edición";
+
+        alert(
+            "Edición habilitada"
+        );
+
+    }else{
+
+        alert(
+            "Contraseña incorrecta"
+        );
+    }
 }
 function render(){
 
