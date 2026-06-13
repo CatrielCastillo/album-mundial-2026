@@ -228,8 +228,9 @@ const stickers = {};
 let selectedTeam = "ARG";
 
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
+  apiKey: "AIzaSyAnch7b_DiQIPteynxOHBM1UZ6yAJ18lZQ",
   authDomain: "album-mundial-caty.firebaseapp.com",
+  databaseURL: "https://album-mundial-caty-default-rtdb.firebaseio.com",
   projectId: "album-mundial-caty",
   storageBucket: "album-mundial-caty.firebasestorage.app",
   messagingSenderId: "445987428714",
@@ -238,16 +239,25 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 const db = firebase.database();
-db.ref("album/collection").on("value", (snapshot) => {
 
-    const data = snapshot.val();
+db.ref("album/collection").on(
+    "value",
+    (snapshot) => {
 
-    if(data){
-        collection = data;
+        const data = snapshot.val();
+
+        if(data){
+            collection = data;
+        } else {
+            collection = {};
+        }
+
         render();
+    },
+    (error) => {
+        console.error("Firebase error:", error);
     }
-});
-
+);
 function generateAlbum(){
 
     teams.forEach(team=>{
@@ -283,9 +293,16 @@ let collection = {};
 
 function save(){
 
-    db.ref("album/collection").set(collection);
+    db.ref("album/collection")
+      .set(collection)
+      .then(() => {
+          console.log("Guardado correctamente");
+      })
+      .catch((error) => {
+          console.error("Error guardando:", error);
+          alert("Error al guardar en Firebase. Abrí F12 y revisá la consola.");
+      });
 }
-
 
 function populateSelect(){
 
